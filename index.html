@@ -1,95 +1,149 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Image to Minecraft JSON</title>
   <style>
-    body { background:#111; color:#eee; font-family:monospace; padding:20px; }
-    textarea { width: 100%; height: 300px; background: #000; color: #0f0; margin-top: 20px; }
-    select, input, button { margin: 5px; }
+    body { font-family: monospace; padding: 20px; background: #222; color: #eee; }
+    input, select, textarea, button { margin: 5px 0; padding: 6px; font-size: 14px; }
+    label { display: block; margin-top: 10px; }
+    textarea { width: 100%; height: 200px; white-space: pre; background: #111; color: #0f0; }
+    .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre; border: 1px solid #444; }
   </style>
 </head>
 <body>
-  <h1>Image to Minecraft JSON (Colored █ or ■)</h1>
-  
-  <input type="file" id="imageInput" accept="image/*"><br>
-  Rows: <input type="number" id="rows" value="10" min="1" max="100">
-  Columns: <input type="number" id="cols" value="10" min="1" max="100">
-  Output Mode:
-  <select id="outputMode">
-    <option value="raw">Raw JSON</option>
-    <option value="tellraw">/tellraw Command</option>
-  </select>
-  Character:
-  <select id="charChoice">
-    <option value="█">█</option>
-    <option value="■">■</option>
-  </select>
-  <button onclick="convertToMinecraft()">Convert</button>
+  <h2>🖼️ Image to Minecraft Colored JSON Tool</h2>
+
+  <label>Upload Image:
+    <input type="file" id="imgInput" accept="image/*">
+  </label>
+
+  <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64"></label>
+  <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64"></label>
+
+  <label>Pixel Character:
+    <select id="charSelect">
+      <option value="█">█</option>
+      <option value="■">■</option>
+      <option value="custom">Custom...</option>
+    </select>
+    <input type="text" id="customChar" value="@" maxlength="1" style="display:none; margin-left: 10px;">
+  </label>
+
+  <label>Output Mode:
+    <select id="mode">
+      <option value="raw">Raw</option>
+      <option value="tellraw">/tellraw</option>
+      <option value="book">/give book</option>
+    </select>
+  </label>
+
+  <div id="bookFields" style="display: none;">
+    <label>Book Title: <input type="text" id="bookTitle" value="Pixel Image"></label>
+    <label>Book Author: <input type="text" id="bookAuthor" value="ImageTool"></label>
+  </div>
+
+  <button onclick="processImage()">Generate JSON</button>
+
+  <h3>📜 Output</h3>
+  <textarea id="output"></textarea>
+
+  <h3>👁️ Preview</h3>
+  <div class="preview" id="previewBox"></div>
 
   <canvas id="canvas" style="display:none;"></canvas>
-  <textarea id="output" readonly></textarea>
 
-  <script>
-    function rgbToHex(r, g, b) {
-      return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
-    }
+<script>
+document.getElementById("mode").addEventListener("change", function () {
+  document.getElementById("bookFields").style.display = this.value === "book" ? "block" : "none";
+});
 
-    function convertToMinecraft() {
-      const file = document.getElementById("imageInput").files[0];
-      const rows = parseInt(document.getElementById("rows").value);
-      const cols = parseInt(document.getElementById("cols").value);
-      const mode = document.getElementById("outputMode").value;
-      const char = document.getElementById("charChoice").value;
-      if (!file) return alert("Please upload an image.");
+document.getElementById("charSelect").addEventListener("change", function () {
+  const customCharInput = document.getElementById("customChar");
+  customCharInput.style.display = this.value === "custom" ? "inline-block" : "none";
+});
 
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const img = new Image();
-        img.onload = function () {
-          const canvas = document.getElementById("canvas");
-          const ctx = canvas.getContext("2d");
+function getColorHex(r, g, b) {
+  return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+}
 
-          canvas.width = cols;
-          canvas.height = rows;
-          ctx.drawImage(img, 0, 0, cols, rows);
-          const data = ctx.getImageData(0, 0, cols, rows).data;
+function getSelectedChar() {
+  const select = document.getElementById("charSelect");
+  const value = select.value;
+  if (value === "custom") {
+    const custom = document.getElementById("customChar").value;
+    return custom || "@"; // fallback if empty
+  }
+  return value;
+}
 
-          if (mode === "raw") {
-            const result = [];
-            for (let y = 0; y < rows; y++) {
-              const line = [];
-              for (let x = 0; x < cols; x++) {
-                const i = (y * cols + x) * 4;
-                const r = data[i], g = data[i+1], b = data[i+2];
-                const color = rgbToHex(r, g, b);
-                line.push({ text: char, color });
-              }
-              result.push(line);
-            }
-            document.getElementById("output").value = JSON.stringify(result, null, 2);
-          } else if (mode === "tellraw") {
-            const extra = [];
-            for (let y = 0; y < rows; y++) {
-              if (y > 0) extra.push({ text: "\n" });
-              for (let x = 0; x < cols; x++) {
-                const i = (y * cols + x) * 4;
-                const r = data[i], g = data[i+1], b = data[i+2];
-                const color = rgbToHex(r, g, b);
-                extra.push({ text: char, color });
-              }
-            }
-            const command = {
-              text: "",
-              extra: extra
-            };
-            document.getElementById("output").value = `/tellraw @p ${JSON.stringify(command)}`;
-          }
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-  </script>
+function processImage() {
+  const file = document.getElementById("imgInput").files[0];
+  const rows = parseInt(document.getElementById("rows").value);
+  const cols = parseInt(document.getElementById("cols").value);
+  const pixelChar = getSelectedChar();
+  const mode = document.getElementById("mode").value;
+  const title = document.getElementById("bookTitle").value;
+  const author = document.getElementById("bookAuthor").value;
+
+  if (!file) return alert("Please upload an image first.");
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const img = new Image();
+    img.onload = function () {
+      const canvas = document.getElementById("canvas");
+      canvas.width = cols;
+      canvas.height = rows;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, cols, rows);
+      const data = ctx.getImageData(0, 0, cols, rows).data;
+
+      const grid = [];
+      for (let y = 0; y < rows; y++) {
+        const line = [];
+        for (let x = 0; x < cols; x++) {
+          const i = (y * cols + x) * 4;
+          const [r, g, b, a] = data.slice(i, i + 4);
+          if (a < 10) continue; // skip transparent
+          const color = getColorHex(r, g, b);
+          line.push({ text: pixelChar, color });
+        }
+        grid.push(line);
+      }
+
+      let output = "";
+      let preview = "";
+
+      if (mode === "raw") {
+        output = JSON.stringify(grid, null, 2);
+        preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
+      } else if (mode === "tellraw") {
+        const components = grid.map(row => ({
+          text: "\n",
+          extra: row.map(px => ({ text: px.text, color: px.color }))
+        }));
+        output = `/tellraw @p ${JSON.stringify(components)}`;
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "book") {
+        const pages = [];
+        for (let i = 0; i < grid.length; i += 14) {
+          const pageLines = grid.slice(i, i + 14).map(row => {
+            return JSON.stringify({ text: "", extra: row });
+          });
+          pages.push(JSON.stringify(pageLines.join("\n")));
+        }
+        output = `/give @p written_book{title:"${title}",author:"${author}",pages:[${pages.join(",")}]}`;
+        preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
+      }
+
+      document.getElementById("output").value = output;
+      document.getElementById("previewBox").innerText = preview;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+</script>
 </body>
 </html>
