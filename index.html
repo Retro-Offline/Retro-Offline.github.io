@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <h1>Image to Minecraft JSON (Colored █)</h1>
+  <h1>Image to Minecraft JSON (Colored █ or ■)</h1>
   
   <input type="file" id="imageInput" accept="image/*"><br>
   Rows: <input type="number" id="rows" value="10" min="1" max="100">
@@ -19,6 +19,11 @@
   <select id="outputMode">
     <option value="raw">Raw JSON</option>
     <option value="tellraw">/tellraw Command</option>
+  </select>
+  Character:
+  <select id="charChoice">
+    <option value="█">█</option>
+    <option value="■">■</option>
   </select>
   <button onclick="convertToMinecraft()">Convert</button>
 
@@ -35,6 +40,7 @@
       const rows = parseInt(document.getElementById("rows").value);
       const cols = parseInt(document.getElementById("cols").value);
       const mode = document.getElementById("outputMode").value;
+      const char = document.getElementById("charChoice").value;
       if (!file) return alert("Please upload an image.");
 
       const reader = new FileReader();
@@ -57,7 +63,7 @@
                 const i = (y * cols + x) * 4;
                 const r = data[i], g = data[i+1], b = data[i+2];
                 const color = rgbToHex(r, g, b);
-                line.push({ text: "█", color });
+                line.push({ text: char, color });
               }
               result.push(line);
             }
@@ -70,7 +76,7 @@
                 const i = (y * cols + x) * 4;
                 const r = data[i], g = data[i+1], b = data[i+2];
                 const color = rgbToHex(r, g, b);
-                extra.push({ text: "█", color });
+                extra.push({ text: char, color });
               }
             }
             const command = {
