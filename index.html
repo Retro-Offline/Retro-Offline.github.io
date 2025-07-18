@@ -1,81 +1,89 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tellraw Command Generator</title>
-<style>
-  textarea { width: 100%; height: 150px; }
-</style>
+  <meta charset="UTF-8" />
+  <title>Image to Minecraft JSON</title>
+  <style>
+    body { background:#111; color:#eee; font-family:monospace; padding:20px; }
+    textarea { width: 100%; height: 300px; background: #000; color: #0f0; margin-top: 20px; }
+    select, input, button { margin: 5px; }
+  </style>
 </head>
 <body>
+  <h1>Image to Minecraft JSON (Colored █)</h1>
+  
+  <input type="file" id="imageInput" accept="image/*"><br>
+  Rows: <input type="number" id="rows" value="10" min="1" max="100">
+  Columns: <input type="number" id="cols" value="10" min="1" max="100">
+  Output Mode:
+  <select id="outputMode">
+    <option value="raw">Raw JSON</option>
+    <option value="tellraw">/tellraw Command</option>
+  </select>
+  <button onclick="convertToMinecraft()">Convert</button>
 
-<h2>Tellraw Command Generator</h2>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <textarea id="output" readonly></textarea>
 
-<label for="modeSelect">Mode:</label>
-<select id="modeSelect">
-  <option value="tellraw" selected>tellraw</option>
-  <option value="other">Other (pretty JSON)</option>
-</select>
-
-<br/><br/>
-
-<button id="generateBtn">Generate Output</button>
-
-<br/><br/>
-
-<textarea id="output" readonly></textarea>
-
-<script>
-function rgbToHex(r, g, b) {
-  return "#" + [r, g, b].map(x => {
-    const hex = x.toString(16);
-    return hex.length === 1 ? "0" + hex : hex;
-  }).join("");
-}
-
-function generateOutput(mode, data, rows, cols) {
-  if (mode === "tellraw") {
-    const extra = [];
-    for (let y = 0; y < rows; y++) {
-      if (y > 0) extra.push({ text: "\n" });
-      for (let x = 0; x < cols; x++) {
-        const i = (y * cols + x) * 4;
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const color = rgbToHex(r, g, b);
-        extra.push({ text: "█", color });
-      }
+  <script>
+    function rgbToHex(r, g, b) {
+      return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
     }
-    const command = {
-      text: "",
-      extra: extra
-    };
-    // NO pretty-printing here — one line output only
-    return `/tellraw @p ${JSON.stringify(command)}`;
-  } else {
-    // For other modes, output pretty JSON for clarity
-    return JSON.stringify(data, null, 2);
-  }
-}
 
-// Example pixel data: 2 rows x 3 cols, RGBA values for each pixel
-const exampleData = [
-  255, 0, 0, 255,    // Red
-  0, 255, 0, 255,    // Green
-  0, 0, 255, 255,    // Blue
-  255, 255, 0, 255,  // Yellow
-  0, 255, 255, 255,  // Cyan
-  255, 0, 255, 255   // Magenta
-];
+    function convertToMinecraft() {
+      const file = document.getElementById("imageInput").files[0];
+      const rows = parseInt(document.getElementById("rows").value);
+      const cols = parseInt(document.getElementById("cols").value);
+      const mode = document.getElementById("outputMode").value;
+      if (!file) return alert("Please upload an image.");
 
-document.getElementById("generateBtn").addEventListener("click", () => {
-  const mode = document.getElementById("modeSelect").value;
-  const rows = 2;
-  const cols = 3;
-  const output = generateOutput(mode, exampleData, rows, cols);
-  document.getElementById("output").value = output;
-});
-</script>
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const img = new Image();
+        img.onload = function () {
+          const canvas = document.getElementById("canvas");
+          const ctx = canvas.getContext("2d");
 
+          canvas.width = cols;
+          canvas.height = rows;
+          ctx.drawImage(img, 0, 0, cols, rows);
+          const data = ctx.getImageData(0, 0, cols, rows).data;
+
+          if (mode === "raw") {
+            const result = [];
+            for (let y = 0; y < rows; y++) {
+              const line = [];
+              for (let x = 0; x < cols; x++) {
+                const i = (y * cols + x) * 4;
+                const r = data[i], g = data[i+1], b = data[i+2];
+                const color = rgbToHex(r, g, b);
+                line.push({ text: "█", color });
+              }
+              result.push(line);
+            }
+            document.getElementById("output").value = JSON.stringify(result, null, 2);
+          } else if (mode === "tellraw") {
+            const extra = [];
+            for (let y = 0; y < rows; y++) {
+              if (y > 0) extra.push({ text: "\n" });
+              for (let x = 0; x < cols; x++) {
+                const i = (y * cols + x) * 4;
+                const r = data[i], g = data[i+1], b = data[i+2];
+                const color = rgbToHex(r, g, b);
+                extra.push({ text: "█", color });
+              }
+            }
+            const command = {
+              text: "",
+              extra: extra
+            };
+            document.getElementById("output").value = `/tellraw @p ${JSON.stringify(command, null, 2)}`;
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  </script>
 </body>
 </html>
