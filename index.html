@@ -128,15 +128,17 @@ function processImage() {
       } else if (mode === "book") {
         const pages = [];
         for (let i = 0; i < grid.length; i += 14) {
-          const pageContent = grid.slice(i, i + 14).map(row => ({
-            text: "\n",
-            extra: row
-          }));
-          const pageJson = { text: "", extra: pageContent };
-          pages.push(JSON.stringify(JSON.stringify(pageJson)));
+          const page = [];
+          for (let y = 0; y < 14; y++) {
+            const row = grid[i + y];
+            if (row) {
+              page.push(...row, { text: "\n" });
+            }
+          }
+          pages.push(JSON.stringify(page));
         }
 
-        output = `give @s written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
+        output = `give @p written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
         preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
       }
 
