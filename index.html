@@ -72,7 +72,7 @@ function getSelectedChar() {
   const value = select.value;
   if (value === "custom") {
     const custom = document.getElementById("customChar").value;
-    return custom || "@"; // fallback if empty
+    return custom || "@";
   }
   return value;
 }
@@ -105,7 +105,7 @@ function processImage() {
         for (let x = 0; x < cols; x++) {
           const i = (y * cols + x) * 4;
           const [r, g, b, a] = data.slice(i, i + 4);
-          if (a < 10) continue; // skip transparent
+          if (a < 10) continue;
           const color = getColorHex(r, g, b);
           line.push({ text: pixelChar, color });
         }
@@ -128,12 +128,15 @@ function processImage() {
       } else if (mode === "book") {
         const pages = [];
         for (let i = 0; i < grid.length; i += 14) {
-          const pageLines = grid.slice(i, i + 14).map(row => {
-            return JSON.stringify({ text: "", extra: row });
-          });
-          pages.push(JSON.stringify(pageLines.join("\n")));
+          const pageContent = grid.slice(i, i + 14).map(row => ({
+            text: "\n",
+            extra: row
+          }));
+          const pageJson = { text: "", extra: pageContent };
+          pages.push(JSON.stringify(JSON.stringify(pageJson)));
         }
-        output = `/give @p written_book{title:"${title}",author:"${author}",pages:[${pages.join(",")}]}`;
+
+        output = `give @s written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
         preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
       }
 
