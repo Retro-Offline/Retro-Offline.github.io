@@ -30,6 +30,8 @@
     <input type="text" id="customChar" value="@" maxlength="1" style="display:none; margin-left: 10px;">
   </label>
 
+  <label>Characters Per Pixel: <input type="number" id="charRepeat" value="1" min="1" max="10"></label>
+
   <label>Output Mode:
     <select id="mode">
       <option value="raw">Raw</option>
@@ -81,7 +83,8 @@ function processImage() {
   const file = document.getElementById("imgInput").files[0];
   const rows = parseInt(document.getElementById("rows").value);
   const cols = parseInt(document.getElementById("cols").value);
-  const pixelChar = getSelectedChar();
+  const repeat = Math.max(1, parseInt(document.getElementById("charRepeat").value));
+  const pixelChar = getSelectedChar().repeat(repeat);
   const mode = document.getElementById("mode").value;
   const title = document.getElementById("bookTitle").value;
   const author = document.getElementById("bookAuthor").value;
@@ -117,7 +120,7 @@ function processImage() {
 
       if (mode === "raw") {
         output = JSON.stringify(grid, null, 2);
-        preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "tellraw") {
         const components = grid.map(row => ({
           text: "\n",
