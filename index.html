@@ -1,23 +1,89 @@
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Background Change</title>
+  <meta charset="UTF-8" />
+  <title>Image to Minecraft JSON</title>
+  <style>
+    body { background:#111; color:#eee; font-family:monospace; padding:20px; }
+    textarea { width: 100%; height: 300px; background: #000; color: #0f0; margin-top: 20px; }
+    select, input, button { margin: 5px; }
+  </style>
 </head>
+<body>
+  <h1>Image to Minecraft JSON (Colored █)</h1>
+  
+  <input type="file" id="imageInput" accept="image/*"><br>
+  Rows: <input type="number" id="rows" value="10" min="1" max="100">
+  Columns: <input type="number" id="cols" value="10" min="1" max="100">
+  Output Mode:
+  <select id="outputMode">
+    <option value="raw">Raw JSON</option>
+    <option value="tellraw">/tellraw Command</option>
+  </select>
+  <button onclick="convertToMinecraft()">Convert</button>
 
-<body bgcolor="#282828">
-    <h1 style="color: #B8B8B8;">
-        Retro-Offline
-    </h1>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <textarea id="output" readonly></textarea>
 
-    <h6 style="color: #B8B8B8;">
-        Downloads:
-    </h6>
+  <script>
+    function rgbToHex(r, g, b) {
+      return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
+    }
 
-    <!-- <button onclick="location.href = 'https://drive.google.com/file/d/1bfA9dmT2qOBwaIzPNy7kF6x_cJTZgwf_/view?usp=sharing';" id="ClusterTruck" class="float-left submit-button" >ClusterTruck</button>  -->
-    <!-- <button onclick="location.href = 'https://drive.google.com/file/d/14DGCrHEtQ0IVcKYMVOcPJi5zTZ4tfMbG/view?usp=sharing';" id="GeometryDash" class="float-left submit-button" >GeometryDash</button>  -->
-    <button onclick="location.href = 'https://drive.google.com/file/d/1D_t82O6rLh9Wge9RllJIzdvww7b7xX2S/view?usp=sharing';" id="Minecraft" class="float-left submit-button" >Minecraft</button>
-    <button onclick="location.href = 'https://drive.google.com/drive/u/3/folders/1PaZNvSKQGV7rhhhGHxro1Qa_dkv76g7K';" id="Drive" class="float-left submit-button" >GoogleDrivePage</button>
+    function convertToMinecraft() {
+      const file = document.getElementById("imageInput").files[0];
+      const rows = parseInt(document.getElementById("rows").value);
+      const cols = parseInt(document.getElementById("cols").value);
+      const mode = document.getElementById("outputMode").value;
+      if (!file) return alert("Please upload an image.");
 
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const img = new Image();
+        img.onload = function () {
+          const canvas = document.getElementById("canvas");
+          const ctx = canvas.getContext("2d");
+
+          canvas.width = cols;
+          canvas.height = rows;
+          ctx.drawImage(img, 0, 0, cols, rows);
+          const data = ctx.getImageData(0, 0, cols, rows).data;
+
+          if (mode === "raw") {
+            const result = [];
+            for (let y = 0; y < rows; y++) {
+              const line = [];
+              for (let x = 0; x < cols; x++) {
+                const i = (y * cols + x) * 4;
+                const r = data[i], g = data[i+1], b = data[i+2];
+                const color = rgbToHex(r, g, b);
+                line.push({ text: "█", color });
+              }
+              result.push(line);
+            }
+            document.getElementById("output").value = JSON.stringify(result, null, 2);
+          } else if (mode === "tellraw") {
+            const extra = [];
+            for (let y = 0; y < rows; y++) {
+              if (y > 0) extra.push({ text: "\n" });
+              for (let x = 0; x < cols; x++) {
+                const i = (y * cols + x) * 4;
+                const r = data[i], g = data[i+1], b = data[i+2];
+                const color = rgbToHex(r, g, b);
+                extra.push({ text: "█", color });
+              }
+            }
+            const command = {
+              text: "",
+              extra: extra
+            };
+            document.getElementById("output").value = `/tellraw @p ${JSON.stringify(command, null, 2)}`;
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  </script>
 </body>
-
 </html>
