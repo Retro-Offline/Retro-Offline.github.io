@@ -39,8 +39,9 @@
   <label>Output Mode:
     <select id="mode">
       <option value="raw">Raw</option>
-      <option value="tellraw">/tellraw</option>
-      <option value="book">/give book</option>
+      <option value="tellraw">Tellraw</option>
+      <option value="book">Book</option>
+      <option value="text_display">Text Display</option>
     </select>
   </label>
 
@@ -149,6 +150,16 @@ function processImage() {
 
         output = `give @p written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
         preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "text_display") {
+        const components = [];
+        grid.forEach((row, rowIndex) => {
+          row.forEach(px => components.push({ text: px.text, color: px.color }));
+          if (rowIndex < grid.length - 1) {
+            components.push({ text: "\n" });
+          }
+        });
+        output = `summon text_display ~ ~ ~ {text:${JSON.stringify(components)}}`;
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       }
 
       document.getElementById("output").value = output;
