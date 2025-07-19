@@ -1,27 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Image to Minecraft JSON</title>
   <style>
     body { font-family: monospace; padding: 20px; background: #222; color: #eee; }
     input, select, textarea, button { margin: 5px 0; padding: 6px; font-size: 14px; }
     label { display: block; margin-top: 10px; }
     textarea { width: 100%; height: 200px; white-space: pre; background: #111; color: #0f0; }
-    .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre; border: 1px solid #444; }
-    #bookWarning { color: orange; display: none; }
+    .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre-wrap; border: 1px solid #444; }
+    #buttonGroup {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
   </style>
 </head>
 <body>
   <h2>🖼️ Image to Minecraft Colored JSON Tool</h2>
 
   <label>Upload Image:
-    <input type="file" id="imgInput" accept="image/*">
+    <input type="file" id="imgInput" accept="image/*" />
   </label>
 
-  <label id="rowLabel">Rows: <input type="number" id="rows" value="14" min="1" max="64"></label>
-  <label id="colLabel">Pixels Per Row: <input type="number" id="cols" value="12" min="1" max="64"></label>
-  <div id="bookWarning">⚠️ Book mode max: 14 rows x 12 pixels</div>
+  <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64" /></label>
+  <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64" /></label>
 
   <label>Pixel Character:
     <select id="charSelect">
@@ -29,7 +32,7 @@
       <option value="■">■</option>
       <option value="custom">Custom...</option>
     </select>
-    <input type="text" id="customChar" value="@" maxlength="1" style="display:none; margin-left: 10px;">
+    <input type="text" id="customChar" value="@" maxlength="1" style="display:none; margin-left: 10px;" />
   </label>
 
   <label>Output Mode:
@@ -42,14 +45,17 @@
   </label>
 
   <div id="bookFields" style="display: none;">
-    <label>Book Title: <input type="text" id="bookTitle" value="Pixel Image"></label>
-    <label>Book Author: <input type="text" id="bookAuthor" value="ImageTool"></label>
+    <label>Book Title: <input type="text" id="bookTitle" value="Pixel Image" /></label>
+    <label>Book Author: <input type="text" id="bookAuthor" value="ImageTool" /></label>
   </div>
 
-  <button onclick="processImage()">Generate JSON</button>
+  <div id="buttonGroup">
+    <button id="generateBtn">Generate JSON</button>
+    <button id="saveBtn" disabled>Save MCFunction</button>
+  </div>
 
   <h3>📜 Output</h3>
-  <textarea id="output"></textarea>
+  <textarea id="output" readonly></textarea>
 
   <h3>👁️ Preview</h3>
   <div class="preview" id="previewBox"></div>
@@ -58,10 +64,7 @@
 
 <script>
 document.getElementById("mode").addEventListener("change", function () {
-  const bookFields = document.getElementById("bookFields");
-  const bookWarning = document.getElementById("bookWarning");
-  bookFields.style.display = this.value === "book" ? "block" : "none";
-  bookWarning.style.display = this.value === "book" ? "block" : "none";
+  document.getElementById("bookFields").style.display = this.value === "book" ? "block" : "none";
 });
 
 document.getElementById("charSelect").addEventListener("change", function () {
@@ -92,7 +95,10 @@ function processImage() {
   const title = document.getElementById("bookTitle").value;
   const author = document.getElementById("bookAuthor").value;
 
-  if (!file) return alert("Please upload an image first.");
+  if (!file) {
+    alert("Please upload an image first.");
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = function (e) {
@@ -123,13 +129,14 @@ function processImage() {
 
       if (mode === "raw") {
         output = JSON.stringify(grid, null, 2);
-        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+        preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
       } else if (mode === "tellraw") {
+        // no slash here!
         const components = grid.map(row => ({
           text: "\n",
           extra: row.map(px => ({ text: px.text, color: px.color }))
         }));
-        output = `/tellraw @p ${JSON.stringify(components)}`;
+        output = `tellraw @p ${JSON.stringify(components)}`;
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "book") {
         const pages = [];
@@ -143,35 +150,58 @@ function processImage() {
           }
           pages.push(JSON.stringify(page));
         }
-
         output = `give @p written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
         preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "textdisplay") {
-        const components = [];
-        grid.forEach((row, idx) => {
-          row.forEach(px => components.push({ text: px.text, color: px.color }));
-          components.push({ text: "\n" });
-        });
-        output = `summon text_display ~ ~ ~ {line_width:2147483647,text:${JSON.stringify(components)}}`;
-        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+        const lines = [];
+        for (let y = 0; y < grid.length; y++) {
+          const row = grid[y];
+          for (let x = 0; x < row.length; x++) {
+            lines.push({ text: row[x].text, color: row[x].color });
+          }
+          lines.push({ text: "\n" });
+        }
+        output = `summon text_display ~ ~ ~ {line_width:2147483647,text:[${lines.map(l => JSON.stringify(l)).join(",")}]}`;
+        preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
       }
 
       document.getElementById("output").value = output;
 
-      // Colored Preview
+      // Update preview with colored spans except raw mode (raw shows plain text)
       if (mode === "raw") {
         document.getElementById("previewBox").innerText = preview;
       } else {
-        const htmlPreview = grid.map(row =>
-          row.map(px => `<span style='color:${px.color}'>${px.text}</span>`).join("")
-        ).join("<br>");
-        document.getElementById("previewBox").innerHTML = htmlPreview;
+        document.getElementById("previewBox").innerHTML = preview;
       }
+
+      // Enable the save button if there's output
+      document.getElementById("saveBtn").disabled = output.trim().length === 0;
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
+
+document.getElementById("generateBtn").addEventListener("click", processImage);
+
+document.getElementById("saveBtn").addEventListener("click", function () {
+  const output = document.getElementById("output").value;
+  if (!output.trim()) {
+    alert("No output to save!");
+    return;
+  }
+  const blob = new Blob([output], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "command.mcfunction";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+});
 </script>
 </body>
 </html>
