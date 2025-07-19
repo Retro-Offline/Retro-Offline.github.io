@@ -9,7 +9,6 @@
     label { display: block; margin-top: 10px; }
     textarea { width: 100%; height: 200px; white-space: pre; background: #111; color: #0f0; }
     .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre; border: 1px solid #444; }
-    #customCharInput { display: none; }
   </style>
 </head>
 <body>
@@ -22,15 +21,13 @@
   <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64"></label>
   <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64"></label>
 
-  <label>Pixel Size: <input type="number" id="pixelSize" value="1" min="1" max="10"></label>
-
   <label>Pixel Character:
-    <select id="charSelect" onchange="toggleCustomCharInput()">
+    <select id="charSelect">
       <option value="█">█</option>
       <option value="■">■</option>
       <option value="custom">Custom...</option>
     </select>
-    <input type="text" id="customCharInput" value="@" maxlength="1">
+    <input type="text" id="customChar" value="@" maxlength="1" style="display:none; margin-left: 10px;">
   </label>
 
   <label>Output Mode:
@@ -56,88 +53,102 @@
 
   <canvas id="canvas" style="display:none;"></canvas>
 
-  <script>
-    document.getElementById("mode").addEventListener("change", function () {
-      document.getElementById("bookFields").style.display = this.value === "book" ? "block" : "none";
-    });
+<script>
+document.getElementById("mode").addEventListener("change", function () {
+  document.getElementById("bookFields").style.display = this.value === "book" ? "block" : "none";
+});
 
-    function toggleCustomCharInput() {
-      const charSelect = document.getElementById("charSelect");
-      const customCharInput = document.getElementById("customCharInput");
-      customCharInput.style.display = charSelect.value === "custom" ? "inline-block" : "none";
-    }
+document.getElementById("charSelect").addEventListener("change", function () {
+  const customCharInput = document.getElementById("customChar");
+  customCharInput.style.display = this.value === "custom" ? "inline-block" : "none";
+});
 
-    function getColorHex(r, g, b) {
-      return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
-    }
+function getColorHex(r, g, b) {
+  return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+}
 
-    function processImage() {
-      const file = document.getElementById("imgInput").files[0];
-      const rows = parseInt(document.getElementById("rows").value);
-      const cols = parseInt(document.getElementById("cols").value);
-      const repeat = parseInt(document.getElementById("pixelSize").value);
-      const charSelect = document.getElementById("charSelect").value;
-      const pixelChar = charSelect === "custom" ? document.getElementById("customCharInput").value || "█" : charSelect;
-      const mode = document.getElementById("mode").value;
-      const title = document.getElementById("bookTitle").value;
-      const author = document.getElementById("bookAuthor").value;
+function getSelectedChar() {
+  const select = document.getElementById("charSelect");
+  const value = select.value;
+  if (value === "custom") {
+    const custom = document.getElementById("customChar").value;
+    return custom || "@";
+  }
+  return value;
+}
 
-      if (!file) return alert("Please upload an image first.");
+function processImage() {
+  const file = document.getElementById("imgInput").files[0];
+  const rows = parseInt(document.getElementById("rows").value);
+  const cols = parseInt(document.getElementById("cols").value);
+  const pixelChar = getSelectedChar();
+  const mode = document.getElementById("mode").value;
+  const title = document.getElementById("bookTitle").value;
+  const author = document.getElementById("bookAuthor").value;
 
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const img = new Image();
-        img.onload = function () {
-          const canvas = document.getElementById("canvas");
-          canvas.width = cols;
-          canvas.height = rows;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, cols, rows);
-          const data = ctx.getImageData(0, 0, cols, rows).data;
+  if (!file) return alert("Please upload an image first.");
 
-          const grid = [];
-          for (let y = 0; y < rows; y++) {
-            const line = [];
-            for (let x = 0; x < cols; x++) {
-              const i = (y * cols + x) * 4;
-              const [r, g, b, a] = data.slice(i, i + 4);
-              if (a < 10) continue;
-              const color = getColorHex(r, g, b);
-              line.push({ text: pixelChar.repeat(repeat), color });
-            }
-            for (let j = 0; j < repeat; j++) {
-              grid.push([...line]); // repeat each row vertically
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const img = new Image();
+    img.onload = function () {
+      const canvas = document.getElementById("canvas");
+      canvas.width = cols;
+      canvas.height = rows;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, cols, rows);
+      const data = ctx.getImageData(0, 0, cols, rows).data;
+
+      const grid = [];
+      for (let y = 0; y < rows; y++) {
+        const line = [];
+        for (let x = 0; x < cols; x++) {
+          const i = (y * cols + x) * 4;
+          const [r, g, b, a] = data.slice(i, i + 4);
+          if (a < 10) continue;
+          const color = getColorHex(r, g, b);
+          line.push({ text: pixelChar, color });
+        }
+        grid.push(line);
+      }
+
+      let output = "";
+      let preview = "";
+
+      if (mode === "raw") {
+        output = JSON.stringify(grid, null, 2);
+        preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
+      } else if (mode === "tellraw") {
+        const components = grid.map(row => ({
+          text: "\n",
+          extra: row.map(px => ({ text: px.text, color: px.color }))
+        }));
+        output = `/tellraw @p ${JSON.stringify(components)}`;
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "book") {
+        const pages = [];
+        for (let i = 0; i < grid.length; i += 14) {
+          const page = [];
+          for (let y = 0; y < 14; y++) {
+            const row = grid[i + y];
+            if (row) {
+              page.push(...row, { text: "\n" });
             }
           }
+          pages.push(JSON.stringify(page));
+        }
 
-          let output = "";
-          let preview = "";
+        output = `give @p written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
+        preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
+      }
 
-          if (mode === "raw") {
-            output = JSON.stringify(grid, null, 2);
-            preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
-          } else if (mode === "tellraw") {
-            const components = grid.map(row => ({ text: "\n", extra: row }));
-            output = `/tellraw @p ${JSON.stringify({ text: "", extra: components })}`;
-            preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
-          } else if (mode === "book") {
-            const pages = [];
-            for (let i = 0; i < grid.length; i += 14) {
-              const pageContent = grid.slice(i, i + 14).map(row => ({ text: "\n", extra: row }));
-              const jsonString = JSON.stringify({ text: "", extra: pageContent });
-              pages.push(JSON.stringify(jsonString));
-            }
-            output = `give @p written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
-            preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
-          }
-
-          document.getElementById("output").value = output;
-          document.getElementById("previewBox").innerText = preview;
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-  </script>
+      document.getElementById("output").value = output;
+      document.getElementById("previewBox").innerText = preview;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+</script>
 </body>
 </html>
