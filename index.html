@@ -18,8 +18,14 @@
     <input type="file" id="imgInput" accept="image/*">
   </label>
 
-  <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64"></label>
-  <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64"></label>
+  <label>
+    Rows <span id="rowWarning" style="color: #aaa; display: none;">(max 14 for book mode)</span>:
+    <input type="number" id="rows" value="14" min="1" max="64">
+  </label>
+  <label>
+    Pixels Per Row <span id="colWarning" style="color: #aaa; display: none;">(max 12 for book mode)</span>:
+    <input type="number" id="cols" value="12" min="1" max="64">
+  </label>
 
   <label>Pixel Character:
     <select id="charSelect">
@@ -55,7 +61,10 @@
 
 <script>
 document.getElementById("mode").addEventListener("change", function () {
-  document.getElementById("bookFields").style.display = this.value === "book" ? "block" : "none";
+  const isBook = this.value === "book";
+  document.getElementById("bookFields").style.display = isBook ? "block" : "none";
+  document.getElementById("rowWarning").style.display = isBook ? "inline" : "none";
+  document.getElementById("colWarning").style.display = isBook ? "inline" : "none";
 });
 
 document.getElementById("charSelect").addEventListener("change", function () {
@@ -143,7 +152,15 @@ function processImage() {
       }
 
       document.getElementById("output").value = output;
-      document.getElementById("previewBox").innerText = preview;
+
+      if (mode !== "raw") {
+        const htmlPreview = grid.map(row =>
+          row.map(px => `<span style='color:${px.color}'>${px.text}</span>`).join("")
+        ).join("<br>");
+        document.getElementById("previewBox").innerHTML = htmlPreview;
+      } else {
+        document.getElementById("previewBox").innerText = preview;
+      }
     };
     img.src = e.target.result;
   };
