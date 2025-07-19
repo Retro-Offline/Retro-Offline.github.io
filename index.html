@@ -41,12 +41,17 @@
       <option value="tellraw">Tellraw</option>
       <option value="book">Book</option>
       <option value="textdisplay">Text Display</option>
+      <option value="scoreboard">Scoreboard</option>
     </select>
   </label>
 
   <div id="bookFields" style="display: none;">
     <label>Book Title: <input type="text" id="bookTitle" value="Pixel Image" /></label>
     <label>Book Author: <input type="text" id="bookAuthor" value="ImageTool" /></label>
+  </div>
+
+  <div id="scoreboardFields" style="display: none;">
+    <label>Scoreboard Name: <input type="text" id="scoreboardName" value="pixelDisplay" /></label>
   </div>
 
   <div id="buttonGroup">
@@ -64,7 +69,9 @@
 
 <script>
 document.getElementById("mode").addEventListener("change", function () {
-  document.getElementById("bookFields").style.display = this.value === "book" ? "block" : "none";
+  const mode = this.value;
+  document.getElementById("bookFields").style.display = mode === "book" ? "block" : "none";
+  document.getElementById("scoreboardFields").style.display = mode === "scoreboard" ? "block" : "none";
 });
 
 document.getElementById("charSelect").addEventListener("change", function () {
@@ -94,9 +101,15 @@ function processImage() {
   const mode = document.getElementById("mode").value;
   const title = document.getElementById("bookTitle").value;
   const author = document.getElementById("bookAuthor").value;
+  const scoreboardName = document.getElementById("scoreboardName").value.trim();
 
   if (!file) {
     alert("Please upload an image first.");
+    return;
+  }
+
+  if (mode === "scoreboard" && scoreboardName.length === 0) {
+    alert("Please enter a scoreboard name.");
     return;
   }
 
@@ -131,7 +144,6 @@ function processImage() {
         output = JSON.stringify(grid, null, 2);
         preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
       } else if (mode === "tellraw") {
-        // no slash here!
         const components = grid.map(row => ({
           text: "\n",
           extra: row.map(px => ({ text: px.text, color: px.color }))
@@ -163,6 +175,28 @@ function processImage() {
         }
         output = `summon text_display ~ ~ ~ {line_width:2147483647,text:[${lines.map(l => JSON.stringify(l)).join(",")}]}`;
         preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
+      } else if (mode === "scoreboard") {
+        const commands = [];
+        commands.push(`scoreboard objectives add ${scoreboardName} dummy`);
+        commands.push(`scoreboard objectives setdisplay sidebar ${scoreboardName}`);
+
+        // Set scores for each row (row0=0, row1=1,...)
+        for (let y = 0; y < grid.length; y++) {
+          commands.push(`scoreboard players set row${y} ${scoreboardName} ${y}`);
+        }
+
+        // Display rows reversed so row0 = bottom line of image
+        for (let y = 0; y < grid.length; y++) {
+          const reversedRow = grid[grid.length - 1 - y];
+          const jsonTextArray = reversedRow.map(px => ({ text: px.text, color: px.color }));
+          const jsonTextStr = JSON.stringify(jsonTextArray);
+          commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
+        }
+
+        output = commands.join("\n");
+
+        // Preview normally top-to-bottom
+        preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
       }
 
       document.getElementById("output").value = output;
@@ -174,7 +208,6 @@ function processImage() {
         document.getElementById("previewBox").innerHTML = preview;
       }
 
-      // Enable the save button if there's output
       document.getElementById("saveBtn").disabled = output.trim().length === 0;
     };
     img.src = e.target.result;
