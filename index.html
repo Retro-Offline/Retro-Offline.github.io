@@ -42,6 +42,7 @@
       <option value="book">Book</option>
       <option value="textdisplay">Text Display</option>
       <option value="scoreboard">Scoreboard</option>
+      <option value="itemlore">Item Lore</option>
     </select>
   </label>
 
@@ -52,6 +53,10 @@
 
   <div id="scoreboardFields" style="display: none;">
     <label>Scoreboard Name: <input type="text" id="scoreboardName" value="pixelDisplay" /></label>
+  </div>
+
+  <div id="itemLoreField" style="display: none;">
+    <label>Item ID: <input type="text" id="itemId" value="minecraft:stick" /></label>
   </div>
 
   <div id="buttonGroup">
@@ -72,6 +77,7 @@ document.getElementById("mode").addEventListener("change", function () {
   const mode = this.value;
   document.getElementById("bookFields").style.display = mode === "book" ? "block" : "none";
   document.getElementById("scoreboardFields").style.display = mode === "scoreboard" ? "block" : "none";
+  document.getElementById("itemLoreField").style.display = mode === "itemlore" ? "block" : "none";
 });
 
 document.getElementById("charSelect").addEventListener("change", function () {
@@ -102,16 +108,10 @@ function processImage() {
   const title = document.getElementById("bookTitle").value;
   const author = document.getElementById("bookAuthor").value;
   const scoreboardName = document.getElementById("scoreboardName").value.trim();
+  const itemId = document.getElementById("itemId").value.trim();
 
-  if (!file) {
-    alert("Please upload an image first.");
-    return;
-  }
-
-  if (mode === "scoreboard" && scoreboardName.length === 0) {
-    alert("Please enter a scoreboard name.");
-    return;
-  }
+  if (!file) return alert("Please upload an image first.");
+  if (mode === "scoreboard" && scoreboardName.length === 0) return alert("Please enter a scoreboard name.");
 
   const reader = new FileReader();
   reader.onload = function (e) {
@@ -140,74 +140,14 @@ function processImage() {
       let output = "";
       let preview = "";
 
-      if (mode === "raw") {
-        output = JSON.stringify(grid, null, 2);
-        preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
-      } else if (mode === "tellraw") {
-        const components = grid.map(row => ({
-          text: "\n",
-          extra: row.map(px => ({ text: px.text, color: px.color }))
-        }));
-        output = `tellraw @p ${JSON.stringify(components)}`;
-        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
-      } else if (mode === "book") {
-        const pages = [];
-        for (let i = 0; i < grid.length; i += 14) {
-          const page = [];
-          for (let y = 0; y < 14; y++) {
-            const row = grid[i + y];
-            if (row) {
-              page.push(...row, { text: "\n" });
-            }
-          }
-          pages.push(JSON.stringify(page));
-        }
-        output = `give @p written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
-        preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
-      } else if (mode === "textdisplay") {
-        const lines = [];
-        for (let y = 0; y < grid.length; y++) {
-          const row = grid[y];
-          for (let x = 0; x < row.length; x++) {
-            lines.push({ text: row[x].text, color: row[x].color });
-          }
-          lines.push({ text: "\n" });
-        }
-        output = `summon text_display ~ ~ ~ {line_width:2147483647,text:[${lines.map(l => JSON.stringify(l)).join(",")}]}`;
-        preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
-      } else if (mode === "scoreboard") {
-        const commands = [];
-        commands.push(`scoreboard objectives add ${scoreboardName} dummy`);
-        commands.push(`scoreboard objectives setdisplay sidebar ${scoreboardName}`);
-
-        // Set scores for each row (row0=0, row1=1,...)
-        for (let y = 0; y < grid.length; y++) {
-          commands.push(`scoreboard players set row${y} ${scoreboardName} ${y}`);
-        }
-
-        // Display rows reversed so row0 = bottom line of image
-        for (let y = 0; y < grid.length; y++) {
-          const reversedRow = grid[grid.length - 1 - y];
-          const jsonTextArray = reversedRow.map(px => ({ text: px.text, color: px.color }));
-          const jsonTextStr = JSON.stringify(jsonTextArray);
-          commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
-        }
-
-        output = commands.join("\n");
-
-        // Preview normally top-to-bottom
+      if (mode === "itemlore") {
+        const loreLines = grid.map(row => `[${row.map(px => JSON.stringify(px)).join(",")}]`);
+        output = `give @s ${itemId}[lore=[${loreLines.join(",")}]]`;
         preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
       }
 
       document.getElementById("output").value = output;
-
-      // Update preview with colored spans except raw mode (raw shows plain text)
-      if (mode === "raw") {
-        document.getElementById("previewBox").innerText = preview;
-      } else {
-        document.getElementById("previewBox").innerHTML = preview;
-      }
-
+      document.getElementById("previewBox").innerHTML = preview;
       document.getElementById("saveBtn").disabled = output.trim().length === 0;
     };
     img.src = e.target.result;
@@ -219,10 +159,7 @@ document.getElementById("generateBtn").addEventListener("click", processImage);
 
 document.getElementById("saveBtn").addEventListener("click", function () {
   const output = document.getElementById("output").value;
-  if (!output.trim()) {
-    alert("No output to save!");
-    return;
-  }
+  if (!output.trim()) return alert("No output to save!");
   const blob = new Blob([output], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
