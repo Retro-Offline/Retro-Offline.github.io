@@ -23,8 +23,8 @@
     <input type="file" id="imgInput" accept="image/*" />
   </label>
 
-  <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64" /></label>
-  <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64" /></label>
+  <label>Rows: <input type="number" id="rows" value="14" min="1" max="64" /></label>
+  <label>Pixels Per Row: <input type="number" id="cols" value="12" min="1" max="64" /></label>
 
   <label>Pixel Character:
     <select id="charSelect">
@@ -55,8 +55,8 @@
     <label>Scoreboard Name: <input type="text" id="scoreboardName" value="pixelDisplay" /></label>
   </div>
 
-  <div id="itemLoreField" style="display: none;">
-    <label>Item ID: <input type="text" id="itemId" value="minecraft:stick" /></label>
+  <div id="itemFields" style="display: none;">
+    <label>Item ID: <input type="text" id="itemId" value="minecraft:diamond_sword" /></label>
   </div>
 
   <div id="buttonGroup">
@@ -77,7 +77,7 @@ document.getElementById("mode").addEventListener("change", function () {
   const mode = this.value;
   document.getElementById("bookFields").style.display = mode === "book" ? "block" : "none";
   document.getElementById("scoreboardFields").style.display = mode === "scoreboard" ? "block" : "none";
-  document.getElementById("itemLoreField").style.display = mode === "itemlore" ? "block" : "none";
+  document.getElementById("itemFields").style.display = mode === "itemlore" ? "block" : "none";
 });
 
 document.getElementById("charSelect").addEventListener("change", function () {
@@ -105,13 +105,15 @@ function processImage() {
   const cols = parseInt(document.getElementById("cols").value);
   const pixelChar = getSelectedChar();
   const mode = document.getElementById("mode").value;
-  const title = document.getElementById("bookTitle").value;
-  const author = document.getElementById("bookAuthor").value;
-  const scoreboardName = document.getElementById("scoreboardName").value.trim();
-  const itemId = document.getElementById("itemId").value.trim();
+  const title = document.getElementById("bookTitle")?.value;
+  const author = document.getElementById("bookAuthor")?.value;
+  const scoreboardName = document.getElementById("scoreboardName")?.value.trim();
+  const itemId = document.getElementById("itemId")?.value.trim();
 
-  if (!file) return alert("Please upload an image first.");
-  if (mode === "scoreboard" && scoreboardName.length === 0) return alert("Please enter a scoreboard name.");
+  if (!file) {
+    alert("Please upload an image first.");
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = function (e) {
@@ -141,13 +143,19 @@ function processImage() {
       let preview = "";
 
       if (mode === "itemlore") {
-        const loreLines = grid.map(row => `[${row.map(px => JSON.stringify(px)).join(",")}]`);
-        output = `give @s ${itemId}[lore=[${loreLines.join(",")}]]`;
+        const loreRows = grid.map(row => `[${row.map(px => JSON.stringify(px)).join(",")}]`);
+        output = `give @s ${itemId}[lore=[${loreRows.join(",")}]]`;
         preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
       }
 
       document.getElementById("output").value = output;
-      document.getElementById("previewBox").innerHTML = preview;
+
+      if (mode === "raw") {
+        document.getElementById("previewBox").innerText = preview;
+      } else {
+        document.getElementById("previewBox").innerHTML = preview;
+      }
+
       document.getElementById("saveBtn").disabled = output.trim().length === 0;
     };
     img.src = e.target.result;
@@ -159,7 +167,10 @@ document.getElementById("generateBtn").addEventListener("click", processImage);
 
 document.getElementById("saveBtn").addEventListener("click", function () {
   const output = document.getElementById("output").value;
-  if (!output.trim()) return alert("No output to save!");
+  if (!output.trim()) {
+    alert("No output to save!");
+    return;
+  }
   const blob = new Blob([output], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
