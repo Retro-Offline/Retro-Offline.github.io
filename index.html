@@ -128,7 +128,7 @@ function processImage() {
           const [r, g, b, a] = data.slice(i, i + 4);
           if (a < 10) continue;
           const color = getColorHex(r, g, b);
-          line.push({ text: pixelChar, color });
+          line.push({ text: pixelChar, color, italic: false });
         }
         grid.push(line);
       }
