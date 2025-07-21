@@ -21,7 +21,7 @@
 
   <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64" /></label>
   <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64" /></label>
-  <input type="text" id="font" value="minecraft:default" />
+  <label>Font: <input type="text" id="font" value="minecraft:default" /></label>
 
   <label>Pixel Character(s):
     <select id="charSelect">
@@ -130,7 +130,11 @@ function processImage() {
           const [r, g, b, a] = data.slice(i, i + 4);
           if (a < 10) continue;
           const color = getColorHex(r, g, b);
-          line.push({ font: font, text: pixelChar, color, italic: false });
+          if (font == "minecraft:default") {
+            line.push({ text: pixelChar, color, italic: false });
+          } else {
+            line.push({ font: font, text: pixelChar, color, italic: false });
+          }
         }
         grid.push(line);
       }
@@ -142,10 +146,17 @@ function processImage() {
         output = JSON.stringify(grid, null, 2);
         preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
       } else if (mode === "tellraw") {
-        const components = grid.map(row => ({
-          text: "\n",
-          extra: row.map(px => ({ font: font, text: px.text, color: px.color }))
-        }));
+        if (font == "minecraft:default") {
+          const components = grid.map(row => ({
+            text: "\n",
+            extra: row.map(px => ({ text: px.text, color: px.color }))
+          }));
+        } else {
+          const components = grid.map(row => ({
+            text: "\n",
+            extra: row.map(px => ({ font: font, text: px.text, color: px.color }))
+          }));
+        }
         output = `tellraw @p ${JSON.stringify(components)}`;
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "book") {
@@ -180,7 +191,11 @@ function processImage() {
         }
         for (let y = 0; y < grid.length; y++) {
           const reversedRow = grid[grid.length - 1 - y];
-          const jsonTextArray = reversedRow.map(px => ({ font: font, text: px.text, color: px.color }));
+          if (font == "minecraft:default") {
+            const jsonTextArray = reversedRow.map(px => ({ text: px.text, color: px.color }));
+          } else {
+            const jsonTextArray = reversedRow.map(px => ({ font: font, text: px.text, color: px.color }));
+          }
           const jsonTextStr = JSON.stringify(jsonTextArray);
           commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
         }
