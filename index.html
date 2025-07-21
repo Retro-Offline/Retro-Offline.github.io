@@ -35,6 +35,27 @@
 </head>
 <body>
   <h1>Rage and EBeedz's Tools (RAET)</h1>
-  <a href="https://Ragebird7200.github.io/im/" class="button-link">Image Generator</a>
+
+  <div id="buttonContainer"></div>
+
+  <script>
+    // 🔧 Set this to your GitHub username
+    const UserName = "Retro-Offline";
+
+    // Create and inject tool links
+    const tools = [
+      { name: "Image Generator", path: "im" }
+    ];
+
+    const container = document.getElementById("buttonContainer");
+
+    tools.forEach(tool => {
+      const a = document.createElement("a");
+      a.href = `https://${UserName}.github.io/${tool.path}/`;
+      a.textContent = tool.name;
+      a.className = "button-link";
+      container.appendChild(a);
+    });
+  </script>
 </body>
 </html>
