@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Image to Minecraft JSON</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #222; color: #eee; }
+    input, select, textarea, button { margin: 5px 0; padding: 6px; font-size: 14px; }
+    label { display: block; margin-top: 10px; }
+    textarea { width: 100%; height: 200px; white-space: pre; background: #111; color: #0f0; }
+    .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre-wrap; border: 1px solid #444; }
+    #buttonGroup { margin-top: 10px; display: flex; gap: 10px; }
+  </style>
+</head>
+<body>
+  <h2>🖼️ Image to Minecraft Colored JSON Tool</h2>
+
+  <label>Upload Image:
+    <input type="file" id="imgInput" accept="image/*" />
+  </label>
+
+  <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64" /></label>
+  <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64" /></label>
+
+  <label>Pixel Character:
+    <select id="charSelect">
+      <option value="█">█</option>
+      <option value="■">■</option>
+      <option value="custom">Custom...</option>
+    </select>
+    <input type="text" id="customChar" value="@" maxlength="1" style="display:none; margin-left: 10px;" />
+  </label>
+
+  <label>Output Mode:
+    <select id="mode">
+      <option value="raw">Raw</option>
+      <option value="tellraw">Tellraw</option>
+      <option value="book">Book</option>
+      <option value="textdisplay">Text Display</option>
+      <option value="scoreboard">Scoreboard</option>
+      <option value="itemlore">Item Lore</option>
+    </select>
+  </label>
+
+  <div id="bookFields" style="display: none;">
+    <label>Book Title: <input type="text" id="bookTitle" value="Pixel Image" /></label>
+    <label>Book Author: <input type="text" id="bookAuthor" value="ImageTool" /></label>
+  </div>
+
+  <div id="scoreboardFields" style="display: none;">
+    <label>Scoreboard Name: <input type="text" id="scoreboardName" value="pixelDisplay" /></label>
+  </div>
+
+  <div id="itemFields" style="display: none;">
+    <label>Item ID: <input type="text" id="itemId" value="minecraft:stick" /></label>
+  </div>
+
+  <div id="buttonGroup">
+    <button id="generateBtn">Generate JSON</button>
+    <button id="saveBtn" disabled>Save MCFunction</button>
+  </div>
+
+  <h3>📜 Output</h3>
+  <textarea id="output" readonly></textarea>
+
+  <h3>👁️ Preview</h3>
+  <div class="preview" id="previewBox"></div>
+
+  <canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+document.getElementById("mode").addEventListener("change", function () {
+  const mode = this.value;
+  document.getElementById("bookFields").style.display = mode === "book" ? "block" : "none";
+  document.getElementById("scoreboardFields").style.display = mode === "scoreboard" ? "block" : "none";
+  document.getElementById("itemFields").style.display = mode === "itemlore" ? "block" : "none";
+});
+
+document.getElementById("charSelect").addEventListener("change", function () {
+  const customCharInput = document.getElementById("customChar");
+  customCharInput.style.display = this.value === "custom" ? "inline-block" : "none";
+});
+
+function getColorHex(r, g, b) {
+  return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+
+function getSelectedChar() {
+  const select = document.getElementById("charSelect");
+  const value = select.value;
+  if (value === "custom") {
+    const custom = document.getElementById("customChar").value;
+    return custom || "@";
+  }
+  return value;
+}
+
+function processImage() {
+  const file = document.getElementById("imgInput").files[0];
+  const rows = parseInt(document.getElementById("rows").value);
+  const cols = parseInt(document.getElementById("cols").value);
+  const pixelChar = getSelectedChar();
+  const mode = document.getElementById("mode").value;
+  const title = document.getElementById("bookTitle")?.value;
+  const author = document.getElementById("bookAuthor")?.value;
+  const scoreboardName = document.getElementById("scoreboardName")?.value.trim();
+  const itemId = document.getElementById("itemId")?.value || "minecraft:stick";
+
+  if (!file) return alert("Please upload an image first.");
+  if (mode === "scoreboard" && scoreboardName.length === 0) return alert("Please enter a scoreboard name.");
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const img = new Image();
+    img.onload = function () {
+      const canvas = document.getElementById("canvas");
+      canvas.width = cols;
+      canvas.height = rows;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, cols, rows);
+      const data = ctx.getImageData(0, 0, cols, rows).data;
+
+      const grid = [];
+      for (let y = 0; y < rows; y++) {
+        const line = [];
+        for (let x = 0; x < cols; x++) {
+          const i = (y * cols + x) * 4;
+          const [r, g, b, a] = data.slice(i, i + 4);
+          if (a < 10) continue;
+          const color = getColorHex(r, g, b);
+          line.push({ text: pixelChar, color, italic: false });
+        }
+        grid.push(line);
+      }
+
+      let output = "";
+      let preview = "";
+
+      if (mode === "raw") {
+        output = JSON.stringify(grid, null, 2);
+        preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
+      } else if (mode === "tellraw") {
+        const components = grid.map(row => ({
+          text: "\n",
+          extra: row.map(px => ({ text: px.text, color: px.color }))
+        }));
+        output = `tellraw @p ${JSON.stringify(components)}`;
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "book") {
+        const pages = [];
+        for (let i = 0; i < grid.length; i += 14) {
+          const page = [];
+          for (let y = 0; y < 14; y++) {
+            const row = grid[i + y];
+            if (row) {
+              page.push(...row, { text: "\n" });
+            }
+          }
+          pages.push(JSON.stringify(page));
+        }
+        output = `give @p written_book[written_book_content={author:"${author}",pages:[${pages.join(",")}],title:"${title}"}]`;
+        preview = `Pages: ${pages.length}\n` + grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "textdisplay") {
+        const lines = [];
+        for (let row of grid) {
+          lines.push(...row);
+          lines.push({ text: "\n" });
+        }
+        output = `summon text_display ~ ~ ~ {line_width:2147483647,text:[${lines.map(l => JSON.stringify(l)).join(",")}]}`;
+        preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
+      } else if (mode === "scoreboard") {
+        const commands = [
+          `scoreboard objectives add ${scoreboardName} dummy`,
+          `scoreboard objectives setdisplay sidebar ${scoreboardName}`
+        ];
+        for (let y = 0; y < grid.length; y++) {
+          commands.push(`scoreboard players set row${y} ${scoreboardName} ${y}`);
+        }
+        for (let y = 0; y < grid.length; y++) {
+          const reversedRow = grid[grid.length - 1 - y];
+          const jsonTextArray = reversedRow.map(px => ({ text: px.text, color: px.color }));
+          const jsonTextStr = JSON.stringify(jsonTextArray);
+          commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
+        }
+        output = commands.join("\n");
+        preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
+      } else if (mode === "itemlore") {
+        const lore = grid.map(row => `[${row.map(px => JSON.stringify(px)).join(",")}]`);
+        output = `give @s ${itemId}[lore=[${lore.join(",")}]]`;
+        preview = grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
+      }
+
+      document.getElementById("output").value = output;
+      document.getElementById("previewBox").innerHTML = mode === "raw" ? output : preview;
+      document.getElementById("saveBtn").disabled = output.trim().length === 0;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+document.getElementById("generateBtn").addEventListener("click", processImage);
+document.getElementById("saveBtn").addEventListener("click", function () {
+  const output = document.getElementById("output").value;
+  if (!output.trim()) {
+    alert("No output to save!");
+    return;
+  }
+  const blob = new Blob([output], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "command.mcfunction";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+});
+</script>
+</body>
+</html>
