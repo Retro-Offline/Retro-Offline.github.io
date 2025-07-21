@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,7 +14,7 @@
   </style>
 </head>
 <body>
-  <h2>Image to Command Generator</h2>
+  <h2>Image to Minecraft Command Generator</h2>
 
   <label>Upload Image:
     <input type="file" id="imgInput" accept="image/*" />
@@ -128,7 +129,9 @@ function processImage() {
           const [r, g, b, a] = data.slice(i, i + 4);
           if (a < 10) continue;
           const color = getColorHex(r, g, b);
-          line.push({ text: pixelChar, color, italic: false });
+          const px = { text: pixelChar, color };
+          if (mode === "itemlore") px.italic = false;
+          line.push(px);
         }
         grid.push(line);
       }
@@ -142,7 +145,7 @@ function processImage() {
       } else if (mode === "tellraw") {
         const components = grid.map(row => ({
           text: "\n",
-          extra: row.map(px => ({ text: px.text, color: px.color }))
+          extra: row
         }));
         output = `tellraw @p ${JSON.stringify(components)}`;
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
@@ -178,7 +181,7 @@ function processImage() {
         }
         for (let y = 0; y < grid.length; y++) {
           const reversedRow = grid[grid.length - 1 - y];
-          const jsonTextArray = reversedRow.map(px => ({ text: px.text, color: px.color }));
+          const jsonTextArray = reversedRow;
           const jsonTextStr = JSON.stringify(jsonTextArray);
           commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
         }
