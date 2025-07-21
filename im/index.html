@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,7 +13,7 @@
   </style>
 </head>
 <body>
-  <h2>Image to Minecraft Command Generator</h2>
+  <h2>Image to Command Generator</h2>
 
   <label>Upload Image:
     <input type="file" id="imgInput" accept="image/*" />
@@ -22,14 +21,15 @@
 
   <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64" /></label>
   <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64" /></label>
+  <input type="text" id="font" value="minecraft:default" />
 
-  <label>Pixel Character:
+  <label>Pixel Character(s):
     <select id="charSelect">
       <option value="█">█</option>
       <option value="■">■</option>
       <option value="custom">Custom...</option>
     </select>
-    <input type="text" id="customChar" value="@" maxlength="1" style="display:none; margin-left: 10px;" />
+    <input type="text" id="customChar" value="@" maxlength="2" style="display:none; margin-left: 10px;" />
   </label>
 
   <label>Output Mode:
@@ -101,6 +101,7 @@ function processImage() {
   const rows = parseInt(document.getElementById("rows").value);
   const cols = parseInt(document.getElementById("cols").value);
   const pixelChar = getSelectedChar();
+  const font = document.getElementById("font").value;
   const mode = document.getElementById("mode").value;
   const title = document.getElementById("bookTitle")?.value;
   const author = document.getElementById("bookAuthor")?.value;
@@ -129,9 +130,7 @@ function processImage() {
           const [r, g, b, a] = data.slice(i, i + 4);
           if (a < 10) continue;
           const color = getColorHex(r, g, b);
-          const px = { text: pixelChar, color };
-          if (mode === "itemlore") px.italic = false;
-          line.push(px);
+          line.push({ font: font, text: pixelChar, color, italic: false });
         }
         grid.push(line);
       }
@@ -145,7 +144,7 @@ function processImage() {
       } else if (mode === "tellraw") {
         const components = grid.map(row => ({
           text: "\n",
-          extra: row
+          extra: row.map(px => ({ font: font, text: px.text, color: px.color }))
         }));
         output = `tellraw @p ${JSON.stringify(components)}`;
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
@@ -181,7 +180,7 @@ function processImage() {
         }
         for (let y = 0; y < grid.length; y++) {
           const reversedRow = grid[grid.length - 1 - y];
-          const jsonTextArray = reversedRow;
+          const jsonTextArray = reversedRow.map(px => ({ text: px.text, color: px.color }));
           const jsonTextStr = JSON.stringify(jsonTextArray);
           commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
         }
