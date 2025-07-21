@@ -180,7 +180,7 @@ function processImage() {
         }
         for (let y = 0; y < grid.length; y++) {
           const reversedRow = grid[grid.length - 1 - y];
-          const jsonTextArray = reversedRow.map(px => ({ text: px.text, color: px.color }));
+          const jsonTextArray = reversedRow.map(px => ({ font: font, text: px.text, color: px.color }));
           const jsonTextStr = JSON.stringify(jsonTextArray);
           commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
         }
