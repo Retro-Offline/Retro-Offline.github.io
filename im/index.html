@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Image to Minecraft JSON</title>
+  <title>Image to Minecraft JSON - GIF Book Fix</title>
   <style>
     body { font-family: monospace; padding: 20px; background: #222; color: #eee; }
     input, select, textarea, button { margin: 5px 0; padding: 6px; font-size: 14px; }
@@ -11,7 +11,7 @@
     .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre-wrap; border: 1px solid #444; }
     #buttonGroup { margin-top: 10px; display: flex; gap: 10px; }
   </style>
-  <!-- Add gifuct-js CDN -->
+  <!-- gifuct-js CDN -->
   <script src="https://unpkg.com/gifuct-js/dist/gifuct.min.js"></script>
 </head>
 <body>
@@ -115,7 +115,6 @@ function loadImageFromBlob(blob) {
   });
 }
 
-// Convert ImageData to grid of text/color objects
 function imageDataToGrid(imageData, cols, rows, pixelChar, font) {
   const grid = [];
   const data = imageData.data;
@@ -143,7 +142,6 @@ function imageDataToGrid(imageData, cols, rows, pixelChar, font) {
   return grid;
 }
 
-// Convert grid to JSON page text array string for book pages
 function gridToPageJson(grid) {
   const pageContent = [];
   grid.forEach(row => {
@@ -184,8 +182,6 @@ async function processImage() {
 
   try {
     if (mode !== "gifbook") {
-      // Single image modes
-
       const img = await loadImageFromBlob(file);
       canvas.width = cols;
       canvas.height = rows;
@@ -213,7 +209,6 @@ async function processImage() {
         output = JSON.stringify([{ text: "", extra: components }], null, 2);
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "book") {
-        // One page only
         const pageJson = gridToPageJson(grid);
         output = JSON.stringify({
           title,
@@ -222,7 +217,6 @@ async function processImage() {
         }, null, 2);
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "textdisplay") {
-        // Summon text_display entities, one per row
         const lines = [];
         for (let y = 0; y < grid.length; y++) {
           const line = grid[y].map(px => px.text).join("");
@@ -231,7 +225,6 @@ async function processImage() {
         output = lines.join("\n");
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "scoreboard") {
-        // Summon armor_stand with scoreboard and text
         if (!scoreboardName) {
           alert("Please enter a scoreboard name.");
           return;
@@ -245,7 +238,6 @@ async function processImage() {
         output = commands.join("\n");
         preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
       } else if (mode === "itemlore") {
-        // Item lore lines as array of strings
         const loreLines = grid.map(row => row.map(px => px.text).join(""));
         output = JSON.stringify(loreLines, null, 2);
         preview = loreLines.join("\n");
@@ -256,8 +248,11 @@ async function processImage() {
       document.getElementById("saveBtn").disabled = output.trim().length === 0;
 
     } else {
-      // GIF Book Mode
-      // Use gifuct-js to parse frames
+      // GIF Book mode
+      if (file.type !== "image/gif") {
+        alert("Please upload a valid GIF file for GIF Book mode.");
+        return;
+      }
 
       const arrayBuffer = await file.arrayBuffer();
       const gif = gifuct.parseGIF(arrayBuffer);
@@ -272,21 +267,20 @@ async function processImage() {
       }
 
       const pages = [];
+      const tempCanvas = document.createElement("canvas");
+      const tempCtx = tempCanvas.getContext("2d");
+      tempCanvas.width = cols;
+      tempCanvas.height = rows;
 
-      for (const frame of frames) {
-        // Create ImageData from frame.patch (RGBA array)
+      for (const [idx, frame] of frames.entries()) {
         canvas.width = frame.dims.width;
         canvas.height = frame.dims.height;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         const frameImageData = ctx.createImageData(frame.dims.width, frame.dims.height);
         frameImageData.data.set(frame.patch);
         ctx.putImageData(frameImageData, 0, 0);
 
-        // Scale frame to desired cols/rows
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = cols;
-        tempCanvas.height = rows;
-        const tempCtx = tempCanvas.getContext("2d");
+        // Clear temp canvas and draw scaled frame
         tempCtx.clearRect(0, 0, cols, rows);
         tempCtx.drawImage(canvas, 0, 0, cols, rows);
 
@@ -297,7 +291,6 @@ async function processImage() {
         pages.push(pageJson);
       }
 
-      // Compose book JSON with all pages
       const bookObj = {
         title,
         author,
@@ -307,7 +300,7 @@ async function processImage() {
       const output = JSON.stringify(bookObj, null, 2);
       document.getElementById("output").value = output;
 
-      // Preview only first page for simplicity
+      // Preview first page
       const firstPageGrid = JSON.parse(pages[0]);
       let preview = "";
       firstPageGrid.forEach(el => {
