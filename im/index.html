@@ -11,12 +11,14 @@
     .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre-wrap; border: 1px solid #444; }
     #buttonGroup { margin-top: 10px; display: flex; gap: 10px; }
   </style>
+  <!-- Add gifuct-js CDN -->
+  <script src="https://unpkg.com/gifuct-js/dist/gifuct.min.js"></script>
 </head>
 <body>
   <h2>Image to Command Generator</h2>
 
-  <label>Upload Image/GIF:
-    <input type="file" id="imgInput" accept="image/*,image/gif" />
+  <label>Upload Image:
+    <input type="file" id="imgInput" accept="image/*" />
   </label>
 
   <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64" /></label>
@@ -70,13 +72,10 @@
 
   <canvas id="canvas" style="display:none;"></canvas>
 
-  <!-- gifuct-js for GIF frame extraction -->
-  <script src="https://cdn.jsdelivr.net/npm/gifuct-js/dist/gifuct.min.js"></script>
-
 <script>
 document.getElementById("mode").addEventListener("change", function () {
   const mode = this.value;
-  document.getElementById("bookFields").style.display = (mode === "book" || mode === "gifbook") ? "block" : "none";
+  document.getElementById("bookFields").style.display = mode === "book" || mode === "gifbook" ? "block" : "none";
   document.getElementById("scoreboardFields").style.display = mode === "scoreboard" ? "block" : "none";
   document.getElementById("itemFields").style.display = mode === "itemlore" ? "block" : "none";
 });
@@ -100,33 +99,68 @@ function getSelectedChar() {
   return value;
 }
 
+function loadImageFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = e => {
+      URL.revokeObjectURL(url);
+      reject(e);
+    };
+    img.src = url;
+  });
+}
+
+// Convert ImageData to grid of text/color objects
 function imageDataToGrid(imageData, cols, rows, pixelChar, font) {
-  const data = imageData.data;
   const grid = [];
+  const data = imageData.data;
   for (let y = 0; y < rows; y++) {
-    const line = [];
+    const row = [];
     for (let x = 0; x < cols; x++) {
       const i = (y * cols + x) * 4;
-      const [r, g, b, a] = data.slice(i, i + 4);
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const a = data[i + 3];
       if (a < 10) {
-        line.push({ text: " ", color: "#000000", italic: false }); // transparent = space
+        row.push({ text: " ", color: "#000000", italic: false });
+        continue;
+      }
+      const color = getColorHex(r, g, b);
+      if (font === "minecraft:default") {
+        row.push({ text: pixelChar, color, italic: false });
       } else {
-        const color = getColorHex(r, g, b);
-        if (font === "minecraft:default") {
-          line.push({ text: pixelChar, color, italic: false });
-        } else {
-          line.push({ font: font, text: pixelChar, color, italic: false });
-        }
+        row.push({ font: font, text: pixelChar, color, italic: false });
       }
     }
-    grid.push(line);
+    grid.push(row);
   }
   return grid;
 }
 
+// Convert grid to JSON page text array string for book pages
+function gridToPageJson(grid) {
+  const pageContent = [];
+  grid.forEach(row => {
+    row.forEach(px => {
+      pageContent.push(px);
+    });
+    pageContent.push({ text: "\n" });
+  });
+  return JSON.stringify(pageContent);
+}
+
 async function processImage() {
   const file = document.getElementById("imgInput").files[0];
-  if (!file) return alert("Please upload an image first.");
+  if (!file) {
+    alert("Please upload an image first.");
+    return;
+  }
 
   const rows = parseInt(document.getElementById("rows").value);
   const cols = parseInt(document.getElementById("cols").value);
@@ -138,168 +172,178 @@ async function processImage() {
   const scoreboardName = document.getElementById("scoreboardName")?.value.trim();
   const itemId = document.getElementById("itemId")?.value || "minecraft:stick";
 
-  if (mode === "scoreboard" && scoreboardName.length === 0) return alert("Please enter a scoreboard name.");
-
-  // Helper to render preview grid text
-  function gridToPreview(grid) {
-    return grid.map(row => row.map(px => `<span style="color:${px.color}">${px.text}</span>`).join("")).join("<br>");
-  }
-
-  // Helper to create pages JSON string array for book modes
-  function gridToPageJson(grid) {
-    const pageContent = [];
-    for (let y = 0; y < grid.length; y++) {
-      pageContent.push(...grid[y]);
-      if (y < grid.length - 1) pageContent.push({ text: "\n" });
-    }
-    return JSON.stringify(pageContent);
-  }
-
-  // Load image utility
-  function loadImageFromBlob(blob) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = URL.createObjectURL(blob);
-    });
+  if (mode === "scoreboard" && scoreboardName.length === 0) {
+    alert("Please enter a scoreboard name.");
+    return;
   }
 
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
 
-  if (mode !== "gifbook") {
-    // Normal image modes - load single image, scale, and process
-    const img = await loadImageFromBlob(file);
-    canvas.width = cols;
-    canvas.height = rows;
-    ctx.clearRect(0, 0, cols, rows);
-    ctx.drawImage(img, 0, 0, cols, rows);
-    const imageData = ctx.getImageData(0, 0, cols, rows);
-    const grid = imageDataToGrid(imageData, cols, rows, pixelChar, font);
+  document.getElementById("saveBtn").disabled = true;
 
-    let output = "";
-    let preview = "";
+  try {
+    if (mode !== "gifbook") {
+      // Single image modes
 
-    if (mode === "raw") {
-      output = JSON.stringify(grid, null, 2);
-      preview = grid.map(row => row.map(px => `%c${px.text}`).join("")).join("\n");
-    } else if (mode === "tellraw") {
-      const components = grid.map(row => ({
-        text: "\n",
-        extra: row.map(px => (font === "minecraft:default" ? { text: px.text, color: px.color } : { font, text: px.text, color: px.color }))
-      }));
-      output = `tellraw @p ${JSON.stringify(components)}`;
-      preview = gridToPreview(grid);
-    } else if (mode === "book") {
-      const maxRowsPerPage = 14;
-      const pages = [];
-      for (let i = 0; i < grid.length; i += maxRowsPerPage) {
-        const pageGrid = grid.slice(i, i + maxRowsPerPage);
-        pages.push(gridToPageJson(pageGrid));
-      }
-      output = `give @p written_book{author:"${author}",title:"${title}",pages:[${pages.join(",")}]}`;
-      preview = `Pages: ${pages.length}\n` + gridToPreview(grid);
-    } else if (mode === "textdisplay") {
-      const lines = [];
-      for (let row of grid) {
-        lines.push(...row);
-        lines.push({ text: "\n" });
-      }
-      output = `summon text_display ~ ~ ~ {line_width:2147483647,text:[${lines.map(l => JSON.stringify(l)).join(",")}]}`;
-      preview = gridToPreview(grid);
-    } else if (mode === "scoreboard") {
-      const commands = [
-        `scoreboard objectives add ${scoreboardName} dummy`,
-        `scoreboard objectives setdisplay sidebar ${scoreboardName}`
-      ];
-      for (let y = 0; y < grid.length; y++) {
-        commands.push(`scoreboard players set row${y} ${scoreboardName} ${y}`);
-      }
-      for (let y = 0; y < grid.length; y++) {
-        const reversedRow = grid[grid.length - 1 - y];
-        const jsonTextArray = reversedRow.map(px => (font === "minecraft:default" ? { text: px.text, color: px.color } : { font, text: px.text, color: px.color }));
-        const jsonTextStr = JSON.stringify(jsonTextArray);
-        commands.push(`scoreboard players display name row${y} ${scoreboardName} ${jsonTextStr}`);
-      }
-      output = commands.join("\n");
-      preview = gridToPreview(grid);
-    } else if (mode === "itemlore") {
-      const lore = grid.map(row => `[${row.map(px => JSON.stringify(px)).join(",")}]`);
-      output = `give @s ${itemId}[lore=[${lore.join(",")}]]`;
-      preview = gridToPreview(grid);
-    }
-
-    document.getElementById("output").value = output;
-    document.getElementById("previewBox").innerHTML = mode === "raw" ? output : preview;
-    document.getElementById("saveBtn").disabled = output.trim().length === 0;
-
-  } else {
-    // GIF book mode: extract frames and create pages
-
-    // Read file as ArrayBuffer
-    const arrayBuffer = await file.arrayBuffer();
-    const gif = gifuct.parseGIF(arrayBuffer);
-    const frames = gifuct.decompressFrames(gif, true);
-
-    const maxRowsPerPage = 14;
-    const pages = [];
-
-    // For preview show first frame only (or count)
-    let preview = "";
-
-    for (const frame of frames) {
-      // create temp canvas to draw each frame
+      const img = await loadImageFromBlob(file);
       canvas.width = cols;
       canvas.height = rows;
       ctx.clearRect(0, 0, cols, rows);
+      ctx.drawImage(img, 0, 0, cols, rows);
+      const imageData = ctx.getImageData(0, 0, cols, rows);
+      const grid = imageDataToGrid(imageData, cols, rows, pixelChar, font);
 
-      // Frame patch is a Uint8ClampedArray RGBA for frame dims
-      // We must draw frame patch scaled to cols x rows
+      let output = "";
+      let preview = "";
 
-      // Create ImageData from frame patch
-      const frameImageData = ctx.createImageData(frame.dims.width, frame.dims.height);
-      frameImageData.data.set(frame.patch);
-      // Draw to temp canvas at original size
-      const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = frame.dims.width;
-      tempCanvas.height = frame.dims.height;
-      const tempCtx = tempCanvas.getContext("2d");
-      tempCtx.putImageData(frameImageData, 0, 0);
+      if (mode === "raw") {
+        output = JSON.stringify(grid, null, 2);
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "tellraw") {
+        const components = grid.map(row => ({
+          text: "\n",
+          extra: row.map(px => ({
+            text: px.text,
+            color: px.color,
+            font: px.font,
+            italic: px.italic
+          }))
+        }));
+        output = JSON.stringify([{ text: "", extra: components }], null, 2);
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "book") {
+        // One page only
+        const pageJson = gridToPageJson(grid);
+        output = JSON.stringify({
+          title,
+          author,
+          pages: [pageJson]
+        }, null, 2);
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "textdisplay") {
+        // Summon text_display entities, one per row
+        const lines = [];
+        for (let y = 0; y < grid.length; y++) {
+          const line = grid[y].map(px => px.text).join("");
+          lines.push(`/summon text_display ~ ~${y} ~ {text:'{"text":"${line}"}'}`);
+        }
+        output = lines.join("\n");
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "scoreboard") {
+        // Summon armor_stand with scoreboard and text
+        if (!scoreboardName) {
+          alert("Please enter a scoreboard name.");
+          return;
+        }
+        let commands = [];
+        for (let y = 0; y < grid.length; y++) {
+          const line = grid[y].map(px => px.text).join("");
+          commands.push(`scoreboard players set @e[type=armor_stand,tag=Line${y}] ${scoreboardName} 1`);
+          commands.push(`tellraw @a {"text":"${line}"}`);
+        }
+        output = commands.join("\n");
+        preview = grid.map(row => row.map(px => px.text).join("")).join("\n");
+      } else if (mode === "itemlore") {
+        // Item lore lines as array of strings
+        const loreLines = grid.map(row => row.map(px => px.text).join(""));
+        output = JSON.stringify(loreLines, null, 2);
+        preview = loreLines.join("\n");
+      }
 
-      // Now draw scaled to main canvas
-      ctx.clearRect(0, 0, cols, rows);
-      ctx.drawImage(tempCanvas, 0, 0, cols, rows);
+      document.getElementById("output").value = output;
+      document.getElementById("previewBox").innerText = preview;
+      document.getElementById("saveBtn").disabled = output.trim().length === 0;
 
-      // Extract scaled image data
-      const scaledData = ctx.getImageData(0, 0, cols, rows);
-      const grid = imageDataToGrid(scaledData, cols, rows, pixelChar, font);
+    } else {
+      // GIF Book Mode
+      // Use gifuct-js to parse frames
 
-      // build page JSON text array string
-      pages.push(gridToPageJson(grid));
+      const arrayBuffer = await file.arrayBuffer();
+      const gif = gifuct.parseGIF(arrayBuffer);
+      const frames = gifuct.decompressFrames(gif, true);
+
+      if (!frames.length) {
+        alert("No frames found in the GIF.");
+        document.getElementById("output").value = "";
+        document.getElementById("previewBox").innerText = "";
+        document.getElementById("saveBtn").disabled = true;
+        return;
+      }
+
+      const pages = [];
+
+      for (const frame of frames) {
+        // Create ImageData from frame.patch (RGBA array)
+        canvas.width = frame.dims.width;
+        canvas.height = frame.dims.height;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const frameImageData = ctx.createImageData(frame.dims.width, frame.dims.height);
+        frameImageData.data.set(frame.patch);
+        ctx.putImageData(frameImageData, 0, 0);
+
+        // Scale frame to desired cols/rows
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = cols;
+        tempCanvas.height = rows;
+        const tempCtx = tempCanvas.getContext("2d");
+        tempCtx.clearRect(0, 0, cols, rows);
+        tempCtx.drawImage(canvas, 0, 0, cols, rows);
+
+        const imageData = tempCtx.getImageData(0, 0, cols, rows);
+        const grid = imageDataToGrid(imageData, cols, rows, pixelChar, font);
+
+        const pageJson = gridToPageJson(grid);
+        pages.push(pageJson);
+      }
+
+      // Compose book JSON with all pages
+      const bookObj = {
+        title,
+        author,
+        pages
+      };
+
+      const output = JSON.stringify(bookObj, null, 2);
+      document.getElementById("output").value = output;
+
+      // Preview only first page for simplicity
+      const firstPageGrid = JSON.parse(pages[0]);
+      let preview = "";
+      firstPageGrid.forEach(el => {
+        if (el.text === "\n") preview += "\n";
+        else preview += el.text || "";
+      });
+      document.getElementById("previewBox").innerText = preview;
+
+      document.getElementById("saveBtn").disabled = false;
     }
-
-    output = `give @p written_book{author:"${author}",title:"${title}",pages:[${pages.join(",")}]}`;
-    preview = `Frames/Pages: ${pages.length}`;
-
-    document.getElementById("output").value = output;
-    document.getElementById("previewBox").innerHTML = preview;
-    document.getElementById("saveBtn").disabled = output.trim().length === 0;
+  } catch (ex) {
+    alert("Error processing image: " + ex.message);
+    console.error(ex);
+    document.getElementById("saveBtn").disabled = true;
   }
 }
 
-document.getElementById("generateBtn").onclick = processImage;
-
-// Save MCFunction
-document.getElementById("saveBtn").onclick = () => {
+function saveMCFunction() {
   const output = document.getElementById("output").value;
-  const blob = new Blob([output], { type: "text/plain" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "output.mcfunction";
-  a.click();
-};
+  if (!output) return;
 
+  const blob = new Blob([output], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "output.mcfunction";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
+}
+
+document.getElementById("generateBtn").addEventListener("click", processImage);
+document.getElementById("saveBtn").addEventListener("click", saveMCFunction);
 </script>
 </body>
 </html>
