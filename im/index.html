@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Image to Minecraft JSON</title>
+  <script src="https://unpkg.com/gifuct-js/dist/gifuct.min.js"></script>
   <style>
     body { font-family: monospace; padding: 20px; background: #222; color: #eee; }
     input, select, textarea, button { margin: 5px 0; padding: 6px; font-size: 14px; }
@@ -11,7 +12,6 @@
     .preview { background: #111; padding: 10px; margin-top: 10px; white-space: pre-wrap; border: 1px solid #444; }
     #buttonGroup { margin-top: 10px; display: flex; gap: 10px; }
   </style>
-  <script src="https://unpkg.com/gifuct-js/dist/gifuct.min.js"></script>
 </head>
 <body>
   <h2>Image to Command Generator</h2>
@@ -20,9 +20,9 @@
     <input type="file" id="imgInput" accept="image/*" />
   </label>
 
-  <label>Rows: <input type="number" id="rows" value="14" min="1" max="64"></label>
-  <label>Columns: <input type="number" id="cols" value="12" min="1" max="64"></label>
-  <label>Font: <input type="text" id="font" value="minecraft:default"></label>
+  <label>Rows (max 14 for book mode): <input type="number" id="rows" value="14" min="1" max="64" /></label>
+  <label>Pixels Per Row (max 12 for book mode): <input type="number" id="cols" value="12" min="1" max="64" /></label>
+  <label>Font: <input type="text" id="font" value="minecraft:default" /></label>
 
   <label>Pixel Character(s):
     <select id="charSelect">
@@ -30,7 +30,7 @@
       <option value="■">■</option>
       <option value="custom">Custom...</option>
     </select>
-    <input type="text" id="customChar" value="@" maxlength="2" style="display:none; margin-left: 10px;">
+    <input type="text" id="customChar" value="@" maxlength="2" style="display:none; margin-left: 10px;" />
   </label>
 
   <label>Output Mode:
@@ -46,16 +46,16 @@
   </label>
 
   <div id="bookFields" style="display: none;">
-    <label>Book Title: <input type="text" id="bookTitle" value="Pixel Image"></label>
-    <label>Book Author: <input type="text" id="bookAuthor" value="ImageTool"></label>
+    <label>Book Title: <input type="text" id="bookTitle" value="Pixel Image" /></label>
+    <label>Book Author: <input type="text" id="bookAuthor" value="ImageTool" /></label>
   </div>
 
   <div id="scoreboardFields" style="display: none;">
-    <label>Scoreboard Name: <input type="text" id="scoreboardName" value="pixelDisplay"></label>
+    <label>Scoreboard Name: <input type="text" id="scoreboardName" value="pixelDisplay" /></label>
   </div>
 
   <div id="itemFields" style="display: none;">
-    <label>Item ID: <input type="text" id="itemId" value="minecraft:stick"></label>
+    <label>Item ID: <input type="text" id="itemId" value="minecraft:stick" /></label>
   </div>
 
   <div id="buttonGroup">
@@ -72,110 +72,128 @@
   <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
-const modeSelect = document.getElementById("mode");
-modeSelect.addEventListener("change", () => {
-  const mode = modeSelect.value;
-  document.getElementById("bookFields").style.display = mode === "book" || mode === "gifbook" ? "block" : "none";
+document.getElementById("mode").addEventListener("change", function () {
+  const mode = this.value;
+  document.getElementById("bookFields").style.display = (mode === "book" || mode === "gifbook") ? "block" : "none";
   document.getElementById("scoreboardFields").style.display = mode === "scoreboard" ? "block" : "none";
   document.getElementById("itemFields").style.display = mode === "itemlore" ? "block" : "none";
 });
 
 document.getElementById("charSelect").addEventListener("change", function () {
-  document.getElementById("customChar").style.display = this.value === "custom" ? "inline-block" : "none";
+  const customCharInput = document.getElementById("customChar");
+  customCharInput.style.display = this.value === "custom" ? "inline-block" : "none";
 });
-
-function getSelectedChar() {
-  const select = document.getElementById("charSelect");
-  return select.value === "custom" ? (document.getElementById("customChar").value || "@") : select.value;
-}
 
 function getColorHex(r, g, b) {
   return "#" + [r, g, b].map(x => x.toString(16).padStart(2, "0")).join("");
 }
 
-async function processImage() {
+function getSelectedChar() {
+  const select = document.getElementById("charSelect");
+  const value = select.value;
+  if (value === "custom") {
+    const custom = document.getElementById("customChar").value;
+    return custom || "@";
+  }
+  return value;
+}
+
+function renderGrid(img, cols, rows, font, pixelChar) {
+  const canvas = document.getElementById("canvas");
+  canvas.width = cols;
+  canvas.height = rows;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, cols, rows);
+  const data = ctx.getImageData(0, 0, cols, rows).data;
+
+  const grid = [];
+  for (let y = 0; y < rows; y++) {
+    const line = [];
+    for (let x = 0; x < cols; x++) {
+      const i = (y * cols + x) * 4;
+      const [r, g, b, a] = data.slice(i, i + 4);
+      if (a < 10) continue;
+      const color = getColorHex(r, g, b);
+      const px = { text: pixelChar, color, italic: false };
+      if (font !== "minecraft:default") px.font = font;
+      line.push(px);
+    }
+    grid.push(line);
+  }
+  return grid;
+}
+
+async function processGifBook(arrayBuffer, cols, rows, font, pixelChar, title, author) {
+  const gif = gifuct.parseGIF(arrayBuffer);
+  const frames = gifuct.decompressFrames(gif, true);
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  canvas.width = cols;
+  canvas.height = rows;
+
+  const pages = [];
+  for (const frame of frames) {
+    const imgData = new ImageData(new Uint8ClampedArray(frame.patch), frame.dims.width, frame.dims.height);
+    ctx.clearRect(0, 0, cols, rows);
+    ctx.putImageData(imgData, 0, 0);
+    const img = new Image();
+    img.src = canvas.toDataURL();
+    await new Promise(r => img.onload = r);
+    const grid = renderGrid(img, cols, rows, font, pixelChar);
+
+    const page = [];
+    for (const row of grid) page.push(...row, { text: "\n" });
+    pages.push(JSON.stringify(page));
+  }
+
+  const output = `give @p written_book[written_book_content={author:\"${author}\",pages:[${pages.join(",")}],title:\"${title}\"}]`;
+  const preview = `Pages: ${pages.length}`;
+  document.getElementById("output").value = output;
+  document.getElementById("previewBox").innerText = preview;
+  document.getElementById("saveBtn").disabled = false;
+}
+
+document.getElementById("generateBtn").addEventListener("click", function () {
   const file = document.getElementById("imgInput").files[0];
   const rows = parseInt(document.getElementById("rows").value);
   const cols = parseInt(document.getElementById("cols").value);
-  const pixelChar = getSelectedChar();
   const font = document.getElementById("font").value;
+  const pixelChar = getSelectedChar();
   const mode = document.getElementById("mode").value;
   const title = document.getElementById("bookTitle")?.value;
   const author = document.getElementById("bookAuthor")?.value;
-  const scoreboardName = document.getElementById("scoreboardName")?.value.trim();
-  const itemId = document.getElementById("itemId")?.value || "minecraft:stick";
 
   if (!file) return alert("Please upload an image first.");
-  if (mode === "scoreboard" && scoreboardName.length === 0) return alert("Please enter a scoreboard name.");
 
   if (mode === "gifbook") {
-    try {
-      const buffer = await file.arrayBuffer();
-      const gif = gifuct.parseGIF(buffer);
-      const frames = gifuct.decompressFrames(gif, true);
-      const canvas = document.getElementById("canvas");
-      const ctx = canvas.getContext("2d");
-      canvas.width = cols;
-      canvas.height = rows;
-      const pages = [];
-
-      for (const frame of frames) {
-        const imageData = new ImageData(new Uint8ClampedArray(frame.patch), frame.dims.width, frame.dims.height);
-        ctx.clearRect(0, 0, cols, rows);
-        ctx.putImageData(imageData, 0, 0);
-        const scaled = ctx.getImageData(0, 0, cols, rows);
-        const data = scaled.data;
-
-        const page = [];
-        for (let y = 0; y < rows; y++) {
-          for (let x = 0; x < cols; x++) {
-            const i = (y * cols + x) * 4;
-            const [r, g, b, a] = data.slice(i, i + 4);
-            if (a < 10) continue;
-            const color = getColorHex(r, g, b);
-            page.push(font === "minecraft:default" ?
-              { text: pixelChar, color, italic: false } :
-              { text: pixelChar, color, font, italic: false }
-            );
-          }
-          page.push({ text: "\n" });
-        }
-        pages.push(JSON.stringify(page));
-      }
-
-      const command = `give @p written_book[written_book_content={author:"${author}",title:"${title}",pages:[${pages.join(",")}]}]`;
-      document.getElementById("output").value = command;
-      document.getElementById("previewBox").innerHTML = `Frames: ${frames.length}`;
-      document.getElementById("saveBtn").disabled = false;
-      return;
-    } catch (err) {
-      alert("Error processing GIF: " + err.message);
-      return;
-    }
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      processGifBook(e.target.result, cols, rows, font, pixelChar, title, author)
+        .catch(err => alert("Error processing GIF: " + err.message));
+    };
+    reader.readAsArrayBuffer(file);
+    return;
   }
 
-  // Default image handling (non-GIF)
   const reader = new FileReader();
   reader.onload = function (e) {
     const img = new Image();
     img.onload = function () {
-      const canvas = document.getElementById("canvas");
-      canvas.width = cols;
-      canvas.height = rows;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, cols, rows);
-      // Further logic here ... (omit for brevity)
+      const grid = renderGrid(img, cols, rows, font, pixelChar);
+      // fallback to your old processImage() logic here as needed
+      alert("Non-GIF modes not yet added in this trimmed copy");
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
-}
-
-document.getElementById("generateBtn").addEventListener("click", processImage);
+});
 
 document.getElementById("saveBtn").addEventListener("click", function () {
   const output = document.getElementById("output").value;
-  if (!output.trim()) return alert("No output to save!");
+  if (!output.trim()) {
+    alert("No output to save!");
+    return;
+  }
   const blob = new Blob([output], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
